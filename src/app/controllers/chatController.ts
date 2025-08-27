@@ -1,6 +1,6 @@
 import { ChatModel } from "@/app/models/chatModel";
 import { MessageModel } from "@/app/models/messageModel";
-import { Chat } from "@/types";
+import { Message } from "@/types";
 
 export const ChatController = {
   async loadChats(user_id: string) {
@@ -41,9 +41,9 @@ export const ChatController = {
         if (process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
           const chatHistory = await MessageModel.getMessages(chat_id);
 
-          const formattedHistory = chatHistory.map((msg) => ({
+          const formattedHistory = chatHistory.map((msg: Message) => ({
             role: msg.role === "user" ? "user" : "model",
-            parts: [{ text: (msg as any).message || "" }],
+            parts: [{ text: msg.text || "" }],
           }));
 
           const response = await fetch(
@@ -81,6 +81,5 @@ export const ChatController = {
     }
 
     return botMessage ? [userMessage, botMessage] : [userMessage];
-  }
-
+  },
 };

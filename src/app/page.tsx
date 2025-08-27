@@ -148,7 +148,7 @@ export default function Home() {
         );
 
         const data = await response.json();
-        let fullText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "⚠️ No reply.";
+        const fullText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "⚠️ No reply.";
 
         for (let i = 0; i < fullText.length; i++) {
           botMessage.text += fullText[i];
