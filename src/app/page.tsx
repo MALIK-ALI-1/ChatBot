@@ -1,7 +1,6 @@
-// src/app/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Chat, Message } from "@/types";
 import { ChatController } from "@/app/controllers/chatController";
 import Sidebar from "@/components/sideBar";
@@ -17,6 +16,22 @@ export default function Home() {
   const [tempTitles, setTempTitles] = useState<{ [key: string]: string }>({});
 
   const USER_ID = "guest";
+
+  // Use useCallback to memoize the function and prevent infinite loops
+  const handleChatSelect = useCallback(async (chatId: string) => {
+    setLoading(true);
+    try {
+      const messages = await ChatController.getMessages(chatId);
+      const chatToSelect = chats.find((c) => c.id === chatId);
+      if (chatToSelect) {
+        setSelectedChat({ ...chatToSelect, messages });
+      }
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [chats]); // `chats` is a dependency here
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -36,22 +51,7 @@ export default function Home() {
       }
     };
     loadInitialData();
-  }, []);
-
-  const handleChatSelect = async (chatId: string) => {
-    setLoading(true);
-    try {
-      const messages = await ChatController.getMessages(chatId);
-      const chatToSelect = chats.find(c => c.id === chatId);
-      if (chatToSelect) {
-        setSelectedChat({ ...chatToSelect, messages });
-      }
-    } catch (error) {
-      console.error("Failed to load messages:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [handleChatSelect]); // Now it's safe to add `handleChatSelect` as a dependency
 
   const startNewChat = async () => {
     setLoading(true);
@@ -148,6 +148,7 @@ export default function Home() {
         );
 
         const data = await response.json();
+        // Changed `let` to `const` for `fullText`
         const fullText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "⚠️ No reply.";
 
         for (let i = 0; i < fullText.length; i++) {
