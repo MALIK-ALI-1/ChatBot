@@ -1,103 +1,220 @@
-import Image from "next/image";
+// src/app/page.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { Chat, Message } from "@/types";
+import { ChatController } from "@/app/controllers/chatController";
+import Sidebar from "@/components/sideBar";
+import ChatWindow from "@/components/ChatWindow";
+import ChatInput from "@/components/ChatInput";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [tempTitles, setTempTitles] = useState<{ [key: string]: string }>({});
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+  const USER_ID = "guest";
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const allChats = await ChatController.loadChats(USER_ID);
+        setChats(allChats);
+
+        if (allChats.length > 0) {
+          const firstChat = allChats[0];
+          await handleChatSelect(firstChat.id);
+        }
+      } catch (error) {
+        console.error("Failed to load chats:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadInitialData();
+  }, []);
+
+  const handleChatSelect = async (chatId: string) => {
+    setLoading(true);
+    try {
+      const messages = await ChatController.getMessages(chatId);
+      const chatToSelect = chats.find(c => c.id === chatId);
+      if (chatToSelect) {
+        setSelectedChat({ ...chatToSelect, messages });
+      }
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startNewChat = async () => {
+    setLoading(true);
+    try {
+      const newChat = await ChatController.startNewChat(USER_ID, "Untitled Chat");
+      setChats([newChat, ...chats]);
+      setSelectedChat(newChat);
+    } catch (error) {
+      console.error("Failed to start new chat:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteChat = async (chatId: string) => {
+    try {
+      await ChatController.deleteChat(chatId);
+      setChats(chats.filter((c) => c.id !== chatId));
+      if (selectedChat?.id === chatId) {
+        setSelectedChat(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete chat:", error);
+    }
+  };
+
+  const saveTitle = async (chatId: string) => {
+    const newTitle = tempTitles[chatId]?.trim();
+    if (!newTitle) {
+      setEditingChatId(null);
+      return;
+    }
+    try {
+      await ChatController.saveTitle(chatId, newTitle);
+      const updatedChats = chats.map(c => c.id === chatId ? { ...c, title: newTitle } : c);
+      setChats(updatedChats);
+      if (selectedChat?.id === chatId) {
+        setSelectedChat({ ...selectedChat, title: newTitle });
+      }
+    } catch (error) {
+      console.error("Failed to save title:", error);
+    } finally {
+      setEditingChatId(null);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || !selectedChat || loading) return;
+    setLoading(true);
+
+    const userMessageText = input;
+    const isNewChat = selectedChat.title === "Untitled Chat";
+    const newTitle = isNewChat ? userMessageText.slice(0, 30) : selectedChat.title;
+
+    try {
+      const userMessage: Message = {
+        id: Date.now().toString() + "_user",
+        role: "user",
+        text: userMessageText,
+        created_at: new Date().toISOString(),
+      };
+
+      const updatedChatBase = {
+        ...selectedChat,
+        title: newTitle,
+        messages: [...(selectedChat.messages ?? []), userMessage],
+      };
+
+      setSelectedChat(updatedChatBase);
+      setChats(chats.map(c => c.id === updatedChatBase.id ? updatedChatBase : c));
+      setInput("");
+
+      const botMessage: Message = {
+        id: Date.now().toString() + "_bot",
+        role: "bot",
+        text: "",
+        created_at: new Date().toISOString(),
+      };
+
+      let streamingChat = { ...updatedChatBase, messages: [...updatedChatBase.messages, botMessage] };
+      setSelectedChat(streamingChat);
+      setChats(chats.map(c => c.id === streamingChat.id ? streamingChat : c));
+
+      if (process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: userMessageText }] }],
+            }),
+          }
+        );
+
+        const data = await response.json();
+        let fullText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "⚠️ No reply.";
+
+        for (let i = 0; i < fullText.length; i++) {
+          botMessage.text += fullText[i];
+          streamingChat = {
+            ...streamingChat,
+            messages: [...streamingChat.messages.slice(0, -1), botMessage],
+          };
+          setSelectedChat({ ...streamingChat });
+          setChats(chats.map(c => c.id === streamingChat.id ? streamingChat : c));
+          await new Promise(res => setTimeout(res, 20));
+        }
+      } else {
+        botMessage.text = `Echo: ${userMessageText}`;
+        streamingChat = { ...streamingChat, messages: [...streamingChat.messages.slice(0, -1), botMessage] };
+        setSelectedChat(streamingChat);
+        setChats(chats.map(c => c.id === streamingChat.id ? streamingChat : c));
+      }
+
+      if (isNewChat) {
+        await ChatController.saveTitle(selectedChat.id, newTitle);
+        const updatedChats = chats.map(c => c.id === selectedChat.id ? { ...c, title: newTitle } : c);
+        setChats(updatedChats);
+      }
+
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      const botMessageError: Message = {
+        id: Date.now().toString() + "_bot_error",
+        role: "bot",
+        text: "⚠️ An error occurred while fetching response.",
+        created_at: new Date().toISOString(),
+      };
+      const updatedChatWithError = { ...selectedChat, messages: [...(selectedChat.messages ?? []), botMessageError] };
+      setSelectedChat(updatedChatWithError);
+      setChats(chats.map(c => c.id === selectedChat.id ? updatedChatWithError : c));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex h-screen">
+      <Sidebar
+        chats={chats}
+        selectedChatId={selectedChat?.id}
+        editingChatId={editingChatId}
+        tempTitles={tempTitles}
+        setEditingChatId={setEditingChatId}
+        setTempTitles={setTempTitles}
+        saveTitle={saveTitle}
+        setSelectedChat={handleChatSelect}
+        deleteChat={deleteChat}
+        startNewChat={startNewChat}
+      />
+
+      <div className="flex-1 flex flex-col bg-emerald-50">
+        <ChatWindow selectedChat={selectedChat} />
+        {selectedChat && (
+          <ChatInput
+            input={input}
+            setInput={setInput}
+            sendMessage={sendMessage}
+            loading={loading}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        )}
+      </div>
     </div>
   );
 }
