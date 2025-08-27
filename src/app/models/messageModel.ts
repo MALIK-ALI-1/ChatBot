@@ -10,10 +10,18 @@ export const MessageModel = {
   ): Promise<Message> {
     const { data, error } = await supabase
       .from("messages")
-      .insert({ chat_id, role, text })
+      .insert({
+        chat_id: chat_id,
+        role: role,
+        text: text,
+      })
       .select("*")
       .single();
-    if (error) throw error;
+
+    if (error) {
+      console.error("Error adding message:", error);
+      throw error;
+    }
     return data as Message;
   },
 
@@ -22,8 +30,12 @@ export const MessageModel = {
       .from("messages")
       .select("*")
       .eq("chat_id", chat_id)
-      .order("created_at", { ascending: true });
-    if (error) throw error;
+      .order("created_at", { ascending: true }); 
+
+    if (error) {
+      console.error("Error fetching messages:", error);
+      throw error;
+    }
     return data as Message[];
   },
 };

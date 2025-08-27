@@ -1,5 +1,3 @@
-"use client";
-
 import { Chat } from "@/types";
 import { Dispatch, SetStateAction, useRef, useState, useEffect } from "react";
 
@@ -40,15 +38,20 @@ export default function ChatList({
   }, []);
 
   return (
-    <div className="space-y-2 w-full md:w-64">
+    <div className="space-y-4 w-full md:w-64">
       {chats.map((chat) => {
         const isEditing = editingChatId === chat.id;
+        const isActive = selectedChatId === chat.id;
 
         return (
           <div
             key={chat.id}
-            className={`group relative flex items-center p-2 rounded-lg cursor-pointer transition-colors duration-200
-              ${selectedChatId === chat.id ? "bg-emerald-700 text-white" : "bg-emerald-100 hover:bg-emerald-200"}`}
+            onClick={() => {
+              if (!isEditing) setSelectedChat(chat.id);
+            }}
+            // Here is the change: adjusted classes to match the New Chat button
+            className={`group relative flex items-center justify-between p-2 rounded-lg cursor-pointer border border-emerald-600
+              ${isActive ? "bg-emerald-600 text-white" : "bg-emerald-100 text-black"}`}
           >
             {isEditing ? (
               <input
@@ -61,12 +64,12 @@ export default function ChatList({
                 className="flex-1 bg-transparent border-b border-emerald-400 focus:outline-none truncate"
               />
             ) : (
-              <div onClick={() => setSelectedChat(chat.id)} className="flex-1 truncate">
+              <div className="flex-1 truncate">
                 {chat.title || "Untitled Chat"}
               </div>
             )}
-
-            <div className="relative" ref={menuRef}>
+            
+            <div className="relative z-10 flex-shrink-0" ref={menuRef}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -77,9 +80,9 @@ export default function ChatList({
               >
                 •••
               </button>
-
+              
               {activeMenu === chat.id && (
-                <div className="absolute right-0 md:right-auto md:left-full mt-2 w-40 bg-white dark:bg-emerald-800 rounded-md shadow-lg py-1 z-20">
+                <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-emerald-800 rounded-md shadow-lg py-1 z-20">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -91,7 +94,6 @@ export default function ChatList({
                   >
                     Edit name
                   </button>
-
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

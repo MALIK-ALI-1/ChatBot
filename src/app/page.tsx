@@ -1,5 +1,7 @@
+// src/app/page.tsx
 "use client";
-import { useEffect, useState, useCallback } from "react";
+
+import { useEffect, useState } from "react";
 import { Chat, Message } from "@/types";
 import { ChatController } from "@/app/controllers/chatController";
 import Sidebar from "@/components/sideBar";
@@ -15,22 +17,6 @@ export default function Home() {
   const [tempTitles, setTempTitles] = useState<{ [key: string]: string }>({});
 
   const USER_ID = "guest";
-
-  // Use useCallback to memoize the function and prevent infinite loops
-  const handleChatSelect = useCallback(async (chatId: string) => {
-    setLoading(true);
-    try {
-      const messages = await ChatController.getMessages(chatId);
-      const chatToSelect = chats.find((c) => c.id === chatId);
-      if (chatToSelect) {
-        setSelectedChat({ ...chatToSelect, messages });
-      }
-    } catch (error) {
-      console.error("Failed to load messages:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [chats]); // `chats` is a dependency here
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -50,7 +36,22 @@ export default function Home() {
       }
     };
     loadInitialData();
-  }, [handleChatSelect]); // Now it's safe to add `handleChatSelect` as a dependency
+  }, []);
+
+  const handleChatSelect = async (chatId: string) => {
+    setLoading(true);
+    try {
+      const messages = await ChatController.getMessages(chatId);
+      const chatToSelect = chats.find(c => c.id === chatId);
+      if (chatToSelect) {
+        setSelectedChat({ ...chatToSelect, messages });
+      }
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const startNewChat = async () => {
     setLoading(true);
@@ -106,71 +107,62 @@ export default function Home() {
     const newTitle = isNewChat ? userMessageText.slice(0, 30) : selectedChat.title;
 
     try {
+      // First, display the user's message immediately
       const userMessage: Message = {
-        id: Date.now().toString() + "_user",
+        id: crypto.randomUUID(), // Use a UUID for a unique key
         role: "user",
         text: userMessageText,
         created_at: new Date().toISOString(),
       };
 
-      const updatedChatBase = {
+      const updatedChatWithUserMessage = {
         ...selectedChat,
         title: newTitle,
         messages: [...(selectedChat.messages ?? []), userMessage],
       };
 
-      setSelectedChat(updatedChatBase);
-      setChats(chats.map(c => c.id === updatedChatBase.id ? updatedChatBase : c));
+      setSelectedChat(updatedChatWithUserMessage);
+      setChats(prevChats => prevChats.map(c => c.id === updatedChatWithUserMessage.id ? updatedChatWithUserMessage : c));
       setInput("");
 
-      const botMessage: Message = {
-        id: Date.now().toString() + "_bot",
-        role: "bot",
-        text: "",
-        created_at: new Date().toISOString(),
-      };
+      // Now, call the controller to save the user message and get the bot reply
+      const botMessages = await ChatController.sendMessage(
+        selectedChat.id,
+        userMessageText,
+        "user",
+        (partialText) => {
+          // Update the state with the streaming bot message
+          setSelectedChat(prevChat => {
+            if (!prevChat) return null;
+            const lastMessage = prevChat.messages[prevChat.messages.length - 1];
+            const isBotMessage = lastMessage.role === 'bot';
 
-      let streamingChat = { ...updatedChatBase, messages: [...updatedChatBase.messages, botMessage] };
-      setSelectedChat(streamingChat);
-      setChats(chats.map(c => c.id === streamingChat.id ? streamingChat : c));
-
-      if (process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: userMessageText }] }],
-            }),
-          }
-        );
-
-        const data = await response.json();
-        // Changed `let` to `const` for `fullText`
-        const fullText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "⚠️ No reply.";
-
-        for (let i = 0; i < fullText.length; i++) {
-          botMessage.text += fullText[i];
-          streamingChat = {
-            ...streamingChat,
-            messages: [...streamingChat.messages.slice(0, -1), botMessage],
-          };
-          setSelectedChat({ ...streamingChat });
-          setChats(chats.map(c => c.id === streamingChat.id ? streamingChat : c));
-          await new Promise(res => setTimeout(res, 20));
+            if (isBotMessage) {
+              lastMessage.text = partialText;
+              return { ...prevChat, messages: [...prevChat.messages.slice(0, -1), lastMessage] };
+            } else {
+              const botMessage: Message = {
+                id: crypto.randomUUID(),
+                role: "bot",
+                text: partialText,
+                created_at: new Date().toISOString(),
+              };
+              return { ...prevChat, messages: [...prevChat.messages, botMessage] };
+            }
+          });
         }
-      } else {
-        botMessage.text = `Echo: ${userMessageText}`;
-        streamingChat = { ...streamingChat, messages: [...streamingChat.messages.slice(0, -1), botMessage] };
-        setSelectedChat(streamingChat);
-        setChats(chats.map(c => c.id === streamingChat.id ? streamingChat : c));
-      }
+      );
+
+      // After streaming is complete, get the final message list from the database
+      // and update the local state with the complete chat data.
+      const finalChat = await ChatController.getMessages(selectedChat.id);
+      setSelectedChat({ ...selectedChat, messages: finalChat, title: newTitle });
+      setChats(prevChats => prevChats.map(c => c.id === selectedChat.id ? { ...c, messages: finalChat, title: newTitle } : c));
+
 
       if (isNewChat) {
         await ChatController.saveTitle(selectedChat.id, newTitle);
-        const updatedChats = chats.map(c => c.id === selectedChat.id ? { ...c, title: newTitle } : c);
-        setChats(updatedChats);
+        setChats(prevChats => prevChats.map(c => c.id === selectedChat.id ? { ...c, title: newTitle } : c));
       }
 
     } catch (error) {
@@ -183,11 +175,12 @@ export default function Home() {
       };
       const updatedChatWithError = { ...selectedChat, messages: [...(selectedChat.messages ?? []), botMessageError] };
       setSelectedChat(updatedChatWithError);
-      setChats(chats.map(c => c.id === selectedChat.id ? updatedChatWithError : c));
+      setChats(prevChats => prevChats.map(c => c.id === selectedChat.id ? updatedChatWithError : c));
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="flex h-screen">

@@ -46,7 +46,7 @@ export default function Sidebar({
       {/* Sidebar chat list */}
       <div
         className={`
-      w-64 bg-gradient-to-b from-emerald-200 to-emerald-400 p-4 text-black overflow-y-auto
+      w-64 bg-gradient-to-b from-emerald-200 to-emerald-400 p-4 text-black overflow-y-auto overflow-x-hidden
       ${isOpen ? "block" : "hidden"} md:block
     `}
       >
@@ -73,6 +73,5 @@ export default function Sidebar({
         />
       </div>
     </div>
-
   );
 }
