@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState, useCallback } from "react";
 import { Chat, Message } from "@/types";
 import { ChatController } from "@/app/controllers/chatController";
