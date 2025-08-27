@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { ChatController } from "@/app/controllers/chatController";
 
+export const runtime = "edge"; // For Vercel Edge functions, required for streaming
+
 export async function POST(req: Request) {
   try {
     const { chat_id, message } = await req.json();
@@ -12,11 +14,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // ➡️ Corrected: Get both messages from the controller
-    const messages = await ChatController.sendMessage(chat_id, message, "user");
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        // This is a placeholder for the stream
+        await ChatController.sendMessage(chat_id, message, "user", (chunk) => {
+          controller.enqueue(chunk);
+        });
+        controller.close();
+      },
+    });
 
-    // ➡️ Corrected: Return the complete messages array
-    return NextResponse.json({ messages });
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/plain",
+      },
+    });
   } catch (err) {
     console.error("API /chat error:", err);
     return NextResponse.json({ error: "⚠️ Server error" }, { status: 500 });
